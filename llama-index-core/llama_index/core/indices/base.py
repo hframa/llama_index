@@ -85,11 +85,14 @@ class BaseIndex(Generic[IS], ABC):
 
         objects = objects or []
         self._object_map = {obj.index_id: obj.obj for obj in objects}
+        for obj in objects:
+            obj.obj = None  # clear the object to avoid serialization issues
+
         with self._callback_manager.as_trace("index_construction"):
             if index_struct is None:
                 nodes = nodes or []
                 index_struct = self.build_index_from_nodes(
-                    nodes + objects  # type: ignore
+                    nodes + objects, **kwargs  # type: ignore
                 )
             self._index_struct = index_struct
             self._storage_context.index_store.add_index_struct(self._index_struct)
@@ -200,13 +203,17 @@ class BaseIndex(Generic[IS], ABC):
         self._storage_context.index_store.add_index_struct(self._index_struct)
 
     @abstractmethod
-    def _build_index_from_nodes(self, nodes: Sequence[BaseNode]) -> IS:
+    def _build_index_from_nodes(
+        self, nodes: Sequence[BaseNode], **build_kwargs: Any
+    ) -> IS:
         """Build the index from nodes."""
 
-    def build_index_from_nodes(self, nodes: Sequence[BaseNode]) -> IS:
+    def build_index_from_nodes(
+        self, nodes: Sequence[BaseNode], **build_kwargs: Any
+    ) -> IS:
         """Build the index from nodes."""
         self._docstore.add_documents(nodes, allow_update=True)
-        return self._build_index_from_nodes(nodes)
+        return self._build_index_from_nodes(nodes, **build_kwargs)
 
     @abstractmethod
     def _insert(self, nodes: Sequence[BaseNode], **insert_kwargs: Any) -> None:
@@ -214,6 +221,14 @@ class BaseIndex(Generic[IS], ABC):
 
     def insert_nodes(self, nodes: Sequence[BaseNode], **insert_kwargs: Any) -> None:
         """Insert nodes."""
+        for node in nodes:
+            if isinstance(node, IndexNode):
+                try:
+                    node.dict()
+                except ValueError:
+                    self._object_map[node.index_id] = node.obj
+                    node.obj = None
+
         with self._callback_manager.as_trace("insert_nodes"):
             self.docstore.add_documents(nodes, allow_update=True)
             self._insert(nodes, **insert_kwargs)
@@ -376,6 +391,11 @@ class BaseIndex(Generic[IS], ABC):
     def as_query_engine(
         self, llm: Optional[LLMType] = None, **kwargs: Any
     ) -> BaseQueryEngine:
+        """Convert the index to a query engine.
+
+        Calls `index.as_retriever(**kwargs)` to get the retriever and then wraps it in a
+        `RetrieverQueryEngine.from_args(retriever, **kwrags)` call.
+        """
         # NOTE: lazy import
         from llama_index.core.query_engine.retriever_query_engine import (
             RetrieverQueryEngine,
@@ -400,6 +420,20 @@ class BaseIndex(Generic[IS], ABC):
         llm: Optional[LLMType] = None,
         **kwargs: Any,
     ) -> BaseChatEngine:
+        """Convert the index to a chat engine.
+
+        Calls `index.as_query_engine(llm=llm, **kwargs)` to get the query engine and then
+        wraps it in a chat engine based on the chat mode.
+
+        Chat modes:
+            - `ChatMode.BEST` (default): Chat engine that uses an agent (react or openai) with a query engine tool
+            - `ChatMode.CONTEXT`: Chat engine that uses a retriever to get context
+            - `ChatMode.CONDENSE_QUESTION`: Chat engine that condenses questions
+            - `ChatMode.CONDENSE_PLUS_CONTEXT`: Chat engine that condenses questions and uses a retriever to get context
+            - `ChatMode.SIMPLE`: Simple chat engine that uses the LLM directly
+            - `ChatMode.REACT`: Chat engine that uses a react agent with a query engine tool
+            - `ChatMode.OPENAI`: Chat engine that uses an openai agent with a query engine tool
+        """
         service_context = kwargs.get("service_context", self.service_context)
 
         if service_context is not None:

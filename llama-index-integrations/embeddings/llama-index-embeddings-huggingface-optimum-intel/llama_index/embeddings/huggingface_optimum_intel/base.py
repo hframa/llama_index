@@ -7,7 +7,7 @@ from llama_index.core.base.embeddings.base import (
 from llama_index.core.bridge.pydantic import Field, PrivateAttr
 from llama_index.core.callbacks import CallbackManager
 from llama_index.core.utils import infer_torch_device
-from llama_index.embeddings.huggingface.utils import format_query, format_text
+from llama_index.utils.huggingface import format_query, format_text
 from transformers import AutoTokenizer
 
 
@@ -45,14 +45,15 @@ class IntelEmbedding(BaseEmbedding):
         device: Optional[str] = None,
     ):
         try:
-            from optimum.intel import INCModel
+            from optimum.intel import IPEXModel
         except ImportError:
             raise ImportError(
                 "Optimum-Intel requires the following dependencies; please install with "
-                "`pip install optimum[exporters] optimum-intel neural-compressor`."
+                "`pip install optimum[exporters] "
+                "optimum-intel neural-compressor intel_extension_for_pytorch`"
             )
 
-        self._model = model or INCModel.from_pretrained(folder_name)
+        self._model = model or IPEXModel.from_pretrained(folder_name)
         self._tokenizer = tokenizer or AutoTokenizer.from_pretrained(folder_name)
         self._device = device or infer_torch_device()
 
@@ -64,6 +65,10 @@ class IntelEmbedding(BaseEmbedding):
                     "Unable to find max_length from model config. "
                     "Please provide max_length."
                 )
+            try:
+                max_length = min(max_length, int(self._tokenizer.model_max_length))
+            except Exception as exc:
+                print(f"An error occurred while retrieving tokenizer max length: {exc}")
 
         if pooling not in ["cls", "mean"]:
             raise ValueError(f"Pooling {pooling} not supported.")

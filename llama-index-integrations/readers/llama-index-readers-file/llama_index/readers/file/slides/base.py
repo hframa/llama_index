@@ -5,8 +5,10 @@ Contains parsers for .pptx files.
 """
 
 import os
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional
+from fsspec import AbstractFileSystem
 
 from llama_index.core.readers.base import BaseReader
 from llama_index.core.schema import Document
@@ -87,11 +89,16 @@ class PptxReader(BaseReader):
         self,
         file: Path,
         extra_info: Optional[Dict] = None,
+        fs: Optional[AbstractFileSystem] = None,
     ) -> List[Document]:
         """Parse file."""
         from pptx import Presentation
 
-        presentation = Presentation(file)
+        if fs:
+            with fs.open(file) as f:
+                presentation = Presentation(f)
+        else:
+            presentation = Presentation(file)
         result = ""
         for i, slide in enumerate(presentation.slides):
             result += f"\n\nSlide #{i}: \n"
@@ -101,12 +108,14 @@ class PptxReader(BaseReader):
                     # get image "file" contents
                     image_bytes = image.blob
                     # temporarily save the image to feed into model
-                    image_filename = f"tmp_image.{image.ext}"
-                    with open(image_filename, "wb") as f:
+                    f = tempfile.NamedTemporaryFile("wb", delete=False)
+                    try:
                         f.write(image_bytes)
-                    result += f"\n Image: {self.caption_image(image_filename)}\n\n"
+                        f.close()
+                        result += f"\n Image: {self.caption_image(f.name)}\n\n"
+                    finally:
+                        os.unlink(f.name)
 
-                    os.remove(image_filename)
                 if hasattr(shape, "text"):
                     result += f"{shape.text}\n"
 

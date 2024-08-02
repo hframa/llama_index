@@ -12,17 +12,29 @@ LLAMA_MODELS = {
     "accounts/fireworks/models/llama-v2-70b-chat": 4096,
     "accounts/fireworks/models/llama-v2-34b-code-instruct": 16384,
     "accounts/fireworks/models/llamaguard-7b": 4096,
+    "accounts/fireworks/models/llama-v3-8b-instruct": 8192,
+    "accounts/fireworks/models/llama-v3-70b-instruct": 8192,
+    "accounts/fireworks/models/llama-v3p1-8b-instruct": 131072,
+    "accounts/fireworks/models/llama-v3p1-70b-instruct": 131072,
+    "accounts/fireworks/models/llama-v3p1-405b-instruct": 131072,
 }
 
 MISTRAL_MODELS = {
     "accounts/fireworks/models/mistral-7b-instruct-4k": 16384,
     "accounts/fireworks/models/mixtral-8x7b-instruct": 32768,
     "accounts/fireworks/models/firefunction-v1": 32768,
+    "accounts/fireworks/models/mixtral-8x22b-instruct": 65536,
 }
+
+FUNCTION_CALLING_MODELS = {
+    "accounts/fireworks/models/firefunction-v2": 8192,
+}
+
 
 ALL_AVAILABLE_MODELS = {
     **LLAMA_MODELS,
     **MISTRAL_MODELS,
+    **FUNCTION_CALLING_MODELS,
 }
 
 DISCONTINUED_MODELS: Dict[str, int] = {}
@@ -61,6 +73,10 @@ def fireworks_modelname_to_contextsize(modelname: str) -> int:
         )
 
     return context_size
+
+
+def is_function_calling_model(model: str) -> bool:
+    return "function" in model
 
 
 def _message_to_fireworks_prompt(message: ChatMessage) -> Dict[str, Any]:

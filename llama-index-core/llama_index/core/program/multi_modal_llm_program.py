@@ -36,7 +36,8 @@ class MultiModalLLMCompletionProgram(BasePydanticProgram[BaseModel]):
     @classmethod
     def from_defaults(
         cls,
-        output_parser: PydanticOutputParser,
+        output_parser: Optional[PydanticOutputParser] = None,
+        output_cls: Optional[Type[BaseModel]] = None,
         prompt_template_str: Optional[str] = None,
         prompt: Optional[PromptTemplate] = None,
         multi_modal_llm: Optional[MultiModalLLM] = None,
@@ -64,6 +65,12 @@ class MultiModalLLMCompletionProgram(BasePydanticProgram[BaseModel]):
             raise ValueError("Must provide either prompt or prompt_template_str.")
         if prompt_template_str is not None:
             prompt = PromptTemplate(prompt_template_str)
+
+        if output_parser is None:
+            if output_cls is None:
+                raise ValueError("Must provide either output_cls or output_parser.")
+            output_parser = PydanticOutputParser(output_cls=output_cls)
+
         return cls(
             output_parser,
             prompt=cast(PromptTemplate, prompt),
@@ -87,6 +94,7 @@ class MultiModalLLMCompletionProgram(BasePydanticProgram[BaseModel]):
     def __call__(
         self,
         llm_kwargs: Optional[Dict[str, Any]] = None,
+        image_documents: Optional[Sequence[ImageDocument]] = None,
         *args: Any,
         **kwargs: Any,
     ) -> BaseModel:
@@ -95,7 +103,7 @@ class MultiModalLLMCompletionProgram(BasePydanticProgram[BaseModel]):
 
         response = self._multi_modal_llm.complete(
             formatted_prompt,
-            image_documents=self._image_documents,
+            image_documents=image_documents or self._image_documents,
             **llm_kwargs,
         )
 
@@ -108,6 +116,7 @@ class MultiModalLLMCompletionProgram(BasePydanticProgram[BaseModel]):
     async def acall(
         self,
         llm_kwargs: Optional[Dict[str, Any]] = None,
+        image_documents: Optional[Sequence[ImageDocument]] = None,
         *args: Any,
         **kwargs: Any,
     ) -> BaseModel:
@@ -116,7 +125,7 @@ class MultiModalLLMCompletionProgram(BasePydanticProgram[BaseModel]):
 
         response = await self._multi_modal_llm.acomplete(
             formatted_prompt,
-            image_documents=self._image_documents,
+            image_documents=image_documents or self._image_documents,
             **llm_kwargs,
         )
 

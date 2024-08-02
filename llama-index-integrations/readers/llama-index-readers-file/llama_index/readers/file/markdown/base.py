@@ -3,10 +3,12 @@
 Contains parser for md files.
 
 """
+
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, cast
-
+from fsspec import AbstractFileSystem
+from fsspec.implementations.local import LocalFileSystem
+from typing import Any, Dict, List, Optional, Tuple
 from llama_index.core.readers.base import BaseReader
 from llama_index.core.schema import Document
 
@@ -41,34 +43,36 @@ class MarkdownReader(BaseReader):
         lines = markdown_text.split("\n")
 
         current_header = None
-        current_text = ""
+        current_lines = []
+        in_code_block = False
 
         for line in lines:
+            if line.startswith("```"):
+                # This is the end of a code block if we are already in it, and vice versa.
+                in_code_block = not in_code_block
+
             header_match = re.match(r"^#+\s", line)
-            if header_match:
-                if current_header is not None:
-                    if current_text == "" or None:
-                        continue
-                    markdown_tups.append((current_header, current_text))
+            if not in_code_block and header_match:
+                # Upon first header, skip if current text chunk is empty
+                if current_header is not None or len(current_lines) > 0:
+                    markdown_tups.append((current_header, "\n".join(current_lines)))
 
                 current_header = line
-                current_text = ""
+                current_lines.clear()
             else:
-                current_text += line + "\n"
-        markdown_tups.append((current_header, current_text))
+                current_lines.append(line)
 
-        if current_header is not None:
-            # pass linting, assert keys are defined
-            markdown_tups = [
-                (re.sub(r"#", "", cast(str, key)).strip(), re.sub(r"<.*?>", "", value))
-                for key, value in markdown_tups
-            ]
-        else:
-            markdown_tups = [
-                (key, re.sub("<.*?>", "", value)) for key, value in markdown_tups
-            ]
+        # Append final text chunk
+        markdown_tups.append((current_header, "\n".join(current_lines)))
 
-        return markdown_tups
+        # Postprocess the tuples before returning
+        return [
+            (
+                key if key is None else re.sub(r"#", "", key).strip(),
+                re.sub(r"<.*?>", "", value),
+            )
+            for key, value in markdown_tups
+        ]
 
     def remove_images(self, content: str) -> str:
         """Remove images in markdown content."""
@@ -85,11 +89,15 @@ class MarkdownReader(BaseReader):
         return {}
 
     def parse_tups(
-        self, filepath: Path, errors: str = "ignore"
+        self,
+        filepath: Path,
+        errors: str = "ignore",
+        fs: Optional[AbstractFileSystem] = None,
     ) -> List[Tuple[Optional[str], str]]:
         """Parse file into tuples."""
-        with open(filepath, encoding="utf-8") as f:
-            content = f.read()
+        fs = fs or LocalFileSystem()
+        with fs.open(filepath, encoding="utf-8") as f:
+            content = f.read().decode(encoding="utf-8")
         if self._remove_hyperlinks:
             content = self.remove_hyperlinks(content)
         if self._remove_images:
@@ -97,10 +105,13 @@ class MarkdownReader(BaseReader):
         return self.markdown_to_tups(content)
 
     def load_data(
-        self, file: Path, extra_info: Optional[Dict] = None
+        self,
+        file: Path,
+        extra_info: Optional[Dict] = None,
+        fs: Optional[AbstractFileSystem] = None,
     ) -> List[Document]:
         """Parse file into string."""
-        tups = self.parse_tups(file)
+        tups = self.parse_tups(file, fs=fs)
         results = []
         # TODO: don't include headers right now
         for header, value in tups:

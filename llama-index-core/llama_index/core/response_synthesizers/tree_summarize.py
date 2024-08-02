@@ -41,6 +41,9 @@ class TreeSummarize(BaseSynthesizer):
         # deprecated
         service_context: Optional[ServiceContext] = None,
     ) -> None:
+        if service_context is not None:
+            prompt_helper = service_context.prompt_helper
+
         super().__init__(
             llm=llm,
             callback_manager=callback_manager,
@@ -82,7 +85,7 @@ class TreeSummarize(BaseSynthesizer):
         if len(text_chunks) == 1:
             response: RESPONSE_TEXT_TYPE
             if self._streaming:
-                response = self._llm.stream(
+                response = await self._llm.astream(
                     summary_template, context_str=text_chunks[0], **response_kwargs
                 )
             else:

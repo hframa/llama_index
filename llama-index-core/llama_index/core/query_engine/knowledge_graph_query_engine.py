@@ -1,5 +1,6 @@
 """ Knowledge Graph Query Engine."""
 
+import deprecated
 import logging
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -47,6 +48,13 @@ DEFAULT_KG_RESPONSE_ANSWER_PROMPT = PromptTemplate(
 )
 
 
+@deprecated.deprecated(
+    version="0.10.53",
+    reason=(
+        "KnowledgeGraphQueryEngine is deprecated. It is recommended to use "
+        "the PropertyGraphIndex and associated retrievers instead."
+    ),
+)
 class KnowledgeGraphQueryEngine(BaseQueryEngine):
     """Knowledge graph query engine.
 
@@ -180,14 +188,14 @@ class KnowledgeGraphQueryEngine(BaseQueryEngine):
         node = NodeWithScore(
             node=TextNode(
                 text=retrieved_graph_context,
-                score=1.0,
                 metadata={
                     "query_str": query_bundle.query_str,
                     "graph_store_query": graph_store_query,
                     "graph_store_response": graph_store_response,
                     "graph_schema": self._graph_schema,
                 },
-            )
+            ),
+            score=1.0,
         )
         return [node]
 
@@ -241,14 +249,14 @@ class KnowledgeGraphQueryEngine(BaseQueryEngine):
         node = NodeWithScore(
             node=TextNode(
                 text=retrieved_graph_context,
-                score=1.0,
                 metadata={
                     "query_str": query_bundle.query_str,
                     "graph_store_query": graph_store_query,
                     "graph_store_response": graph_store_response,
                     "graph_schema": self._graph_schema,
                 },
-            )
+            ),
+            score=1.0,
         )
         return [node]
 

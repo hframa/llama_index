@@ -5,6 +5,7 @@ the summary to the underlying Nodes.
 This summary can be used for retrieval.
 
 """
+
 import logging
 from collections import defaultdict
 from enum import Enum
@@ -39,7 +40,7 @@ from llama_index.core.settings import (
 from llama_index.core.storage.docstore.types import RefDocInfo
 from llama_index.core.storage.storage_context import StorageContext
 from llama_index.core.utils import get_tqdm_iterable
-from llama_index.core.vector_stores.types import VectorStore
+from llama_index.core.vector_stores.types import BasePydanticVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,7 @@ class DocumentSummaryIndex(BaseIndex[IndexDocumentSummary]):
         )
 
     @property
-    def vector_store(self) -> VectorStore:
+    def vector_store(self) -> BasePydanticVectorStore:
         return self._vector_store
 
     def as_retriever(
@@ -199,11 +200,15 @@ class DocumentSummaryIndex(BaseIndex[IndexDocumentSummary]):
                 nodes=nodes_with_scores,
             )
             summary_response = cast(Response, summary_response)
+            docid_first_node = doc_id_to_nodes.get(doc_id, [TextNode()])[0]
             summary_node_dict[doc_id] = TextNode(
                 text=summary_response.response,
                 relationships={
                     NodeRelationship.SOURCE: RelatedNodeInfo(node_id=doc_id)
                 },
+                metadata=docid_first_node.metadata,
+                excluded_embed_metadata_keys=docid_first_node.excluded_embed_metadata_keys,
+                excluded_llm_metadata_keys=docid_first_node.excluded_llm_metadata_keys,
             )
             self.docstore.add_documents([summary_node_dict[doc_id]])
             logger.info(
@@ -224,7 +229,6 @@ class DocumentSummaryIndex(BaseIndex[IndexDocumentSummary]):
                 node_with_embedding = node.copy()
                 node_with_embedding.embedding = id_to_embed_map[node.node_id]
                 summary_nodes_with_embedding.append(node_with_embedding)
-
             self._vector_store.add(summary_nodes_with_embedding)
 
     def _build_index_from_nodes(

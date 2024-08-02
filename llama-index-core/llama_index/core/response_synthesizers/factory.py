@@ -19,6 +19,7 @@ from llama_index.core.response_synthesizers.compact_and_accumulate import (
 from llama_index.core.response_synthesizers.compact_and_refine import (
     CompactAndRefine,
 )
+from llama_index.core.response_synthesizers.context_only import ContextOnly
 from llama_index.core.response_synthesizers.generation import Generation
 from llama_index.core.response_synthesizers.no_text import NoText
 from llama_index.core.response_synthesizers.refine import Refine
@@ -31,7 +32,6 @@ from llama_index.core.settings import (
     Settings,
     callback_manager_from_settings_or_context,
     llm_from_settings_or_context,
-    prompt_helper_from_settings_or_context,
 )
 from llama_index.core.types import BasePydanticProgram
 
@@ -63,9 +63,17 @@ def get_response_synthesizer(
         Settings, service_context
     )
     llm = llm or llm_from_settings_or_context(Settings, service_context)
-    prompt_helper = prompt_helper or prompt_helper_from_settings_or_context(
-        Settings, service_context
-    )
+
+    if service_context is not None:
+        prompt_helper = service_context.prompt_helper
+    else:
+        prompt_helper = (
+            prompt_helper
+            or Settings._prompt_helper
+            or PromptHelper.from_llm_metadata(
+                llm.metadata,
+            )
+        )
 
     if response_mode == ResponseMode.REFINE:
         return Refine(
@@ -156,10 +164,15 @@ def get_response_synthesizer(
         )
     elif response_mode == ResponseMode.NO_TEXT:
         return NoText(
-            llm=llm,
-            streaming=streaming,
             callback_manager=callback_manager,
-            prompt_helper=prompt_helper,
+            streaming=streaming,
+            # deprecated
+            service_context=service_context,
+        )
+    elif response_mode == ResponseMode.CONTEXT_ONLY:
+        return ContextOnly(
+            callback_manager=callback_manager,
+            streaming=streaming,
             # deprecated
             service_context=service_context,
         )
